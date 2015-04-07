@@ -150,7 +150,7 @@ func doDir(path string) {
 	defer ofs.Close()
 	bofs := bufio.NewWriter(ofs)
 	fmt.Fprintln(bofs, "package", pathToPkg(filepath.Base(path)))
-	fmt.Fprintln(bofs, `import "p2/bindata"`)
+	fmt.Fprintln(bofs, `import "github.com/apesternikov/bindata"`)
 	if len(subdirs) > 0 {
 		fullpkgname := getFullPackageName(path)
 		fmt.Fprintln(bofs, "import (")
