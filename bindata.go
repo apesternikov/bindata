@@ -9,10 +9,11 @@ import (
 )
 
 type Bindata struct {
-	Data     []byte
-	Filename string
-	FileMode os.FileMode
-	Time     time.Time
+	Data        []byte
+	Filename    string
+	FileMode    os.FileMode
+	Time        time.Time
+	FullPkgPath string //relative to the $GOROOT/$GOPATH
 }
 
 func (b *Bindata) Name() string {
@@ -55,9 +56,10 @@ func (d *Bindata) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 type Dir struct {
-	Pkg   string
-	Files []*Bindata
-	Dirs  []*Dir
+	Pkg         string
+	Files       []*Bindata
+	Dirs        []*Dir
+	FullPkgName string
 }
 
 func NewDir(pkg string, files []*Bindata, dirs []*Dir) *Dir {

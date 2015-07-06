@@ -3,8 +3,11 @@ package testdata
 import "github.com/apesternikov/bindata"
 import "time"
 
-var File_txt = &bindata.Bindata{ []byte{
+var File_txt = &bindata.Bindata{ Data: []byte{
 	
 0x61,0x62,0x63,},
-	"file.txt", 420, time.Unix(1436111106, 0),
+	Filename: "file.txt", 
+	FileMode: 420,
+	Time: time.Unix(1436111106, 0),
+	FullPkgPath: "/github.com/apesternikov/bindata/internal/mkbinfs/testdata/file.txt",
 }
