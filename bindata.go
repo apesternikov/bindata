@@ -35,6 +35,8 @@ func (b *Bindata) Sys() interface{} {
 	return nil
 }
 
+var BindataDevMode = flags.String()
+
 var starttime = time.Now()
 
 func (d *Bindata) ServeHTTP(w http.ResponseWriter, req *http.Request) {
