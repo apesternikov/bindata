@@ -3,17 +3,26 @@ package bindata
 import (
 	"bytes"
 	"errors"
+	"flag"
+	"go/build"
+	ht "html/template"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/golang/glog"
 )
 
+var BindataDevMode = flag.Bool("bindata_dev_mode", false, "developer mode for bindata")
+
 type Bindata struct {
-	Data        []byte
-	Filename    string
-	FileMode    os.FileMode
-	Time        time.Time
-	FullPkgPath string //relative to the $GOROOT/$GOPATH
+	Data         []byte //Do not use directly to read content, use GetBytes() instead
+	Filename     string
+	FileMode     os.FileMode
+	Time         time.Time
+	FullPkgPath  string //relative to the $GOROOT/$GOPATH
+	htmltemplate *ht.Template
 }
 
 func (b *Bindata) Name() string {
@@ -36,13 +45,80 @@ func (b *Bindata) Sys() interface{} {
 	return nil
 }
 
-var BindataDevMode = flags.String()
+func (b *Bindata) GetBytes() []byte {
+	_, err := b.Refresh()
+	if err != nil {
+		panic(err) //only possible in dev mode
+	}
+	return b.Data
+}
+
+func (b *Bindata) AsHtmlTemplate() *ht.Template {
+	changed, err := b.Refresh()
+	if err != nil {
+		panic(err) //only possible in dev mode
+	}
+	//TODO: race condition
+	if b.htmltemplate == nil || changed {
+		t, err := ht.New(b.Filename).Parse(string(b.Data))
+		if err != nil {
+			glog.Errorf("Error parsing template %s: %s", b.Filename, err)
+			return b.htmltemplate //return old value
+		}
+		b.htmltemplate = t
+	}
+	return b.htmltemplate
+}
+
+var NoSuchFile = errors.New("No such file")
+
+// Refresh the content of the bindata from a file in DevMode
+// Does nothing in non-DevMode(prod mode)
+func (b *Bindata) Refresh() (changed bool, err error) {
+	if *BindataDevMode {
+		for _, root := range build.Default.SrcDirs() {
+			abspath := root + "/" + b.FullPkgPath
+			if finf, err := os.Stat(abspath); err == nil {
+				if finf.ModTime().After(b.Time) {
+					data, err := ioutil.ReadFile(abspath)
+					if err != nil {
+						return false, err
+					}
+					//TODO: race condition
+					b.Data = data
+					b.Time = finf.ModTime()
+					b.FileMode = finf.Mode()
+					return true, nil
+				}
+				return false, nil
+			}
+		}
+		return false, NoSuchFile
+	}
+	return false, nil
+}
 
 var starttime = time.Now()
 
+func findAbsPath(pkgpath string) string {
+	var abspath string
+	for _, root := range build.Default.SrcDirs() {
+		abspath = root + "/" + pkgpath
+		if _, err := os.Stat(abspath); err == nil {
+			return abspath
+		}
+	}
+	//not found, return path within the last source dir and let http serve 404
+	return abspath
+}
+
 func (d *Bindata) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	reader := bytes.NewReader(d.Data)
-	http.ServeContent(w, req, d.Filename, starttime, reader)
+	if !*BindataDevMode {
+		reader := bytes.NewReader(d.Data)
+		http.ServeContent(w, req, d.Filename, starttime, reader)
+	} else {
+		http.ServeFile(w, req, findAbsPath(d.FullPkgPath))
+	}
 }
 
 var badOffsetError = errors.New("Bad offset")
@@ -63,17 +139,31 @@ type Dir struct {
 }
 
 func NewDir(pkg string, files []*Bindata, dirs []*Dir) *Dir {
-	return &Dir{pkg, files, dirs}
+	return &Dir{Pkg: pkg, Files: files, Dirs: dirs}
 }
 
 type HttpFs struct {
 	files map[string]*Bindata
 }
 
-func NewHttpFs(root *Dir) *HttpFs {
-	fs := &HttpFs{files: make(map[string]*Bindata)}
-	fs.appendDir("/", root)
-	return fs
+// create a HTTP FileSystem implementation based on the bindata content.
+// Use as
+// mux.Handle("/static", http.FileServer(bindata.NewHttpFs(static.Dir)))
+func NewHttpFs(root *Dir) http.FileSystem {
+	if !*BindataDevMode {
+		fs := &HttpFs{files: make(map[string]*Bindata)}
+		fs.appendDir("/", root)
+		return fs
+	} else {
+		// dev mode
+		for _, d := range build.Default.SrcDirs() {
+			abspath := d + "/" + root.FullPkgName
+			if finf, err := os.Stat(abspath); err == nil && finf.IsDir() {
+				return http.Dir(abspath)
+			}
+		}
+		panic("Unable to locate dir for package " + root.FullPkgName)
+	}
 }
 
 func (h *HttpFs) appendDir(base string, dir *Dir) {

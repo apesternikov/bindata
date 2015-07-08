@@ -91,12 +91,14 @@ func genfile(path string, info os.FileInfo) (varname string) {
 	return
 }
 
-var gopath = os.Getenv("GOPATH")
-
 func getFullPackageName(path string) string {
 	for _, root := range build.Default.SrcDirs() {
 		if strings.HasPrefix(path, root) {
-			return path[len(root):]
+			s := path[len(root):]
+			if strings.HasPrefix(s, "/") {
+				s = s[1:]
+			}
+			return s
 		}
 	}
 	panic(errors.New("Path not in GOPATH"))
