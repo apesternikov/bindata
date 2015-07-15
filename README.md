@@ -1,4 +1,6 @@
-## bindata
+[![Build Status](https://travis-ci.org/apesternikov/bindata.svg?branch=master)](https://travis-ci.org/apesternikov/bindata)
+
+## Bindata
 
 bindata is a [Go](http://golang.org) package that allows embedding html, images or any other files into your go binary. This would simplify your server deployment to a single binary file and eliminate many deployment - related errors like missing resource files.
 
